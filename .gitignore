@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+.env
+.env.*
+!.env.example
+.DS_Store
+**/artifacts/
+
+# Local launch configuration may contain API credentials.
+/ConceptStudio.Console/Properties/launchSettings.json

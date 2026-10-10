@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "ConceptStudio.Console"
+		},
+		{
+			"name": "ConceptStudio.GuidelinesMcp",
+			"path": "ConceptStudio.GuidelinesMcp"
+		},
+		{
+			"path": "ConceptStudio.Core"
+		},
+		{
+			"path": "ConceptStudio.Web"
+		}
+	],
+	"settings": {}
+}

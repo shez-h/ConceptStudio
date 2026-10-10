@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>ConceptStudio.Web-9f4ec329-8c2a-45dd-930f-75c8d96c1a32</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ConceptStudio.Core/ConceptStudio.Core.csproj" />
+    <ProjectReference Include="../ConceptStudio.GuidelinesMcp/ConceptStudio.GuidelinesMcp.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Target Name="CopyGuidelinesMcpServer" AfterTargets="Build">
+    <ItemGroup>
+      <McpServerFiles Include="../ConceptStudio.GuidelinesMcp/bin/$(Configuration)/$(TargetFramework)/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(McpServerFiles)" DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-server/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

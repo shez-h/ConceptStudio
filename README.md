@@ -281,3 +281,32 @@ Each concept card has **Delete concept**. Confirming removes that concept and it
 from the active session. Use **Save session** to persist the deletion; reopening the last save
 before saving restores it. Other concepts keep their images and briefs. Existing image files
 remain on disk as artifacts; deletion removes them from the session, not from the filesystem.
+
+## Sketch and reference inputs
+
+The web brief accepts one optional PNG/JPEG reference (up to 5 MB) per generation. Upload a
+reference, choose **Preserve the main shape** or **Use as loose inspiration**, then add concepts.
+The selector can reuse earlier references or choose **No reference image** for a new idea.
+Uploading is local and makes no model call. Generating concepts and visualizing them sends the
+selected image to OpenAI in addition to the text and uses the normal paid API calls.
+
+- `AgentRequestBuilder.WithInput(text, image)` creates a multimodal user message.
+- `ConceptGenerationRequest` supplies the brief, reference guidance and image bytes to Responses.
+- `StudioService` records the reference ID and mode on each resulting concept, independently of
+  the next draft's settings. The model does not choose that provenance.
+- `ConceptImageGenerator` uses image edits for concepts with a reference, passing the original
+  pixels plus the concept prompt and guidelines. Text-only concepts still use image generation.
+- Subsequent refinements edit the selected generated revision as before.
+
+This follows the [OpenAI image edit API](https://developers.openai.com/api/reference/resources/images/methods/edit).
+Preserving shape is a prompt preference, not an exact geometry guarantee.
+
+Use **Save session** to persist reference metadata and selection. Original files are stored under
+`artifacts/sessions/<session-id>/references/` with server-generated filenames; the session JSON
+stores IDs and display names, not client file paths. Existing sessions without reference fields
+remain compatible. The original reference appears inside each concept's **Original brief** panel.
+Removing it from the next draft does not remove it from existing concepts. PDFs and Word documents
+are not supported by this first version.
+
+Local checks cover multimodal request payloads, reference-based image edits, saving/reopening,
+per-concept provenance, invalid formats and upload size limits; model responses are simulated.

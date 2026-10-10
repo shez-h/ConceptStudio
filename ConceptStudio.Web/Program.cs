@@ -22,12 +22,18 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'";
     if (context.Request.Path.StartsWithSegments("/api")) context.Response.Headers.CacheControl = "no-store";
+    if (context.Request.Method == "POST" && context.Request.Path.Value?.EndsWith("/references") == true)
+    {
+        var limit = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+        if (limit is { IsReadOnly: false }) limit.MaxRequestBodySize = SessionReference.MaxBytes;
+    }
     try { await next(); }
     catch (Exception ex) when (!context.Response.HasStarted)
     {
         // Do not expose provider bodies, filesystem paths or secrets in browser errors.
         var (status, message) = ex switch
         {
+            BadHttpRequestException bad => (bad.StatusCode, "The upload or request is too large or invalid. Images must be PNG/JPEG up to 5 MB."),
             ClientResultException api => (502, $"The model API returned HTTP {api.Status}. Check model access, billing and quota."),
             OperationCanceledException => (504, "The request timed out or was cancelled. It may still have been processed; check your usage before retrying."),
             InvalidOperationException => (503, "Set OPENAI_API_KEY in the server environment, then restart the app."),
@@ -66,6 +72,8 @@ app.MapPost("/api/sessions/{id:guid}/open", async (Guid id, StudioService studio
         {
             current.Name = saved.Name; current.Brief = saved.Brief; current.SavedAt = saved.SavedAt;
             current.SelectedRevisionId = saved.SelectedRevisionId; current.HasUnsavedChanges = false;
+            current.References.Clear(); current.References.AddRange(saved.References);
+            current.DraftReferenceId = saved.DraftReferenceId; current.ReferenceMode = saved.ReferenceMode;
             current.Concepts.Clear(); current.Concepts.AddRange(saved.Concepts);
             current.Trace.Clear(); current.Trace.AddRange(saved.Trace);
             current.Revisions.Clear();
@@ -88,12 +96,42 @@ app.MapPost("/api/sessions/{id:guid}/save", async (Guid id, SaveSessionRequest i
     {
         if (input.SelectedRevisionId is { } selected && !session.Revisions.ContainsKey(selected))
             return Results.BadRequest(new { error = "Unknown selected revision." });
+        if (input.ReferenceMode is not ("preserve" or "inspiration") ||
+            input.DraftReferenceId is { } referenceId && !session.References.Any(r => r.Id == referenceId))
+            return Results.BadRequest(new { error = "Choose a valid reference image and usage mode." });
+        session.DraftReferenceId = input.DraftReferenceId; session.ReferenceMode = input.ReferenceMode;
         session.Name = input.Name.Trim(); session.Brief = input.Brief; session.HasUnsavedChanges = true;
         session.SelectedRevisionId = input.SelectedRevisionId;
         await store.SaveAsync(session, ct);
         return Results.Ok(session.View());
     }
     finally { session.Gate.Release(); }
+});
+app.MapPost("/api/sessions/{id:guid}/references", async (Guid id, HttpRequest request, StudioService studio, SessionStore store, CancellationToken ct) =>
+{
+    var session = await studio.FindSessionAsync(id, ct);
+    if (session is null) return Results.NotFound();
+    if (!await session.Gate.WaitAsync(0, ct)) return Results.Conflict(new { error = "This session is busy." });
+    try
+    {
+        if (request.ContentLength > SessionReference.MaxBytes) return Results.BadRequest(new { error = "Choose an image up to 5 MB." });
+        using var buffer = new MemoryStream();
+        await request.Body.CopyToAsync(buffer, ct);
+        try
+        {
+            var reference = await store.AddReferenceAsync(session, request.Query["name"].ToString(), buffer.ToArray(), ct);
+            return Results.Ok(reference.View(id));
+        }
+        catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    }
+    finally { session.Gate.Release(); }
+});
+app.MapGet("/api/sessions/{id:guid}/references/{referenceId:guid}", async (Guid id, Guid referenceId, StudioService studio, SessionStore store, CancellationToken ct) =>
+{
+    var session = await studio.FindSessionAsync(id, ct);
+    var reference = session?.References.SingleOrDefault(r => r.Id == referenceId);
+    return reference is not null && File.Exists(store.ReferencePath(id, reference))
+        ? Results.File(store.ReferencePath(id, reference), reference.MediaType) : Results.NotFound();
 });
 app.MapPost("/api/sessions/{id:guid}/concepts", async (Guid id, GenerateConceptsRequest input, StudioService studio, CancellationToken ct) =>
 {
@@ -104,7 +142,14 @@ app.MapPost("/api/sessions/{id:guid}/concepts", async (Guid id, GenerateConcepts
     var session = await studio.FindSessionAsync(id, ct);
     if (session is null) return Results.NotFound();
     if (!await session.Gate.WaitAsync(0, ct)) return Results.Conflict(new { error = "An operation is already running for this session." });
-    try { return Results.Ok((await studio.GenerateConceptsAsync(session, input.Brief.Trim(), input.Count, ct)).View()); }
+    try
+    {
+        if (input.ReferenceMode is not ("preserve" or "inspiration") ||
+            input.ReferenceImageId is { } referenceId && !session.References.Any(r => r.Id == referenceId))
+            return Results.BadRequest(new { error = "Choose a valid reference image and usage mode." });
+        return Results.Ok((await studio.GenerateConceptsAsync(session, input.Brief.Trim(), input.Count, ct,
+            input.ReferenceImageId, input.ReferenceMode)).View());
+    }
     finally { session.Gate.Release(); }
 });
 app.MapPost("/api/sessions/{id:guid}/concepts/{index:int}/delete", async (Guid id, int index, StudioService studio, CancellationToken ct) =>

@@ -41,6 +41,17 @@ public static class ImageChecks
                 throw new Exception("Saved prompt differs from the sent prompt.");
             Console.WriteLine("PASS: Image endpoint, model/settings, prompt capture, base64 decoding, PNG save (simulated API)");
 
+            foreach (string mode in new[] { "preserve", "inspiration" })
+            {
+                var sketch = new SketchInput(imagePath, "image/png", mode);
+                string fromSketch = await generator.GenerateAsync(concept, directory, sketch: sketch);
+                if (handler.Path != "/v1/images/edits" || !handler.Body!.Contains(sketch.Guidance) ||
+                    !handler.Body.Contains(concept.ImagePrompt) || !handler.Body.Contains(concept.AppliedGuidelines[0]) ||
+                    handler.Bytes!.AsSpan().IndexOf(Convert.FromBase64String(FakeImageApi.Png)) < 0 ||
+                    fromSketch == imagePath || !File.Exists(fromSketch))
+                    throw new Exception("Sketch visualization must upload source pixels with concept, guidelines and reference mode.");
+            }
+            Console.WriteLine("PASS: Reference-based visualization uploads sketch pixels using edits in both reference modes");
             var editor = new ConceptImageEditor(client);
             const string feedback = "Remove the third window; preserve the rest of the design.";
             string editedPath = await editor.EditAsync(concept, imagePath, feedback, directory);

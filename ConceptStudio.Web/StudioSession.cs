@@ -7,6 +7,9 @@ public sealed class StudioSession
     public string Brief { get; set; } = "";
     public List<Concept> Concepts { get; init; } = [];
     public List<string> Trace { get; init; } = [];
+    public List<SessionReference> References { get; init; } = [];
+    public Guid? DraftReferenceId { get; set; }
+    public string ReferenceMode { get; set; } = "preserve";
     public bool HasUnsavedChanges { get; set; }
     public DateTimeOffset? SavedAt { get; set; }
     public Guid? SelectedRevisionId { get; set; }
@@ -30,7 +33,8 @@ public sealed class StudioSession
         return true;
     }
 
-    public object View() => new { Id, Name, Brief, Concepts, Trace, SavedAt, SelectedRevisionId, HasUnsavedChanges,
+    public object View() => new { Id, Name, Brief, Concepts, Trace, SavedAt, SelectedRevisionId, HasUnsavedChanges, DraftReferenceId, ReferenceMode,
+        references = References.Select(r => r.View(Id)),
         revisions = Revisions.Values.OrderBy(r => r.CreatedAt).Select(r => r.View(Id)) };
 }
 
@@ -47,6 +51,6 @@ public sealed class StudioRevision(Guid id, int conceptIndex, string path, Guid?
         imageUrl = $"/api/sessions/{sessionId}/images/{Id}" };
 }
 public sealed record BriefRequest(string Brief);
-public sealed record GenerateConceptsRequest(string Brief, int Count = 3);
-public sealed record SaveSessionRequest(string Name, string Brief, Guid? SelectedRevisionId);
+public sealed record GenerateConceptsRequest(string Brief, int Count = 3, Guid? ReferenceImageId = null, string ReferenceMode = "preserve");
+public sealed record SaveSessionRequest(string Name, string Brief, Guid? SelectedRevisionId, Guid? DraftReferenceId = null, string ReferenceMode = "preserve");
 public sealed record ImageRequest(int ConceptIndex, Guid? SourceRevisionId, string? Feedback);

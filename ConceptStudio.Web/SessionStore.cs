@@ -7,6 +7,27 @@ public sealed class SessionStore(string rootDirectory)
     private string Folder(Guid id) => Path.Combine(Path.GetFullPath(rootDirectory), id.ToString());
     private string ImagePath(Guid id, Guid revisionId) => Path.Combine(Folder(id), "images", revisionId.ToString(), "preview.png");
 
+    public string ReferencePath(Guid sessionId, SessionReference reference)
+    {
+        string extension = reference.MediaType switch { "image/png" => ".png", "image/jpeg" => ".jpg",
+            _ => throw new InvalidDataException("Unsupported reference type.") };
+        return Path.Combine(Folder(sessionId), "references", reference.Id + extension);
+    }
+
+    public async Task<SessionReference> AddReferenceAsync(StudioSession session, string name, byte[] bytes, CancellationToken ct = default)
+    {
+        string mediaType = SessionReference.DetectMediaType(bytes);
+        var reference = new SessionReference(Guid.NewGuid(), Path.GetFileName(name).Length is > 0 and <= 120
+            ? Path.GetFileName(name) : "Reference image", mediaType);
+        string path = ReferencePath(session.Id, reference);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, bytes, ct);
+        session.References.Add(reference);
+        session.DraftReferenceId = reference.Id;
+        session.HasUnsavedChanges = true;
+        return reference;
+    }
+
     // Caller holds the session gate, so concepts/revisions cannot change during the snapshot.
     public async Task SaveAsync(StudioSession session, CancellationToken ct = default)
     {
@@ -33,7 +54,8 @@ public sealed class SessionStore(string rootDirectory)
         var snapshot = new SessionSnapshot(1, session.Id, session.Name, session.Brief, savedAt,
             session.Concepts, session.Trace, session.SelectedRevisionId,
             session.Revisions.Values.OrderBy(r => r.CreatedAt).Select(r => new RevisionSnapshot(
-                r.Id, r.ConceptIndex, r.SourceRevisionId, r.Feedback, r.CreatedAt, r.Review)).ToList());
+                r.Id, r.ConceptIndex, r.SourceRevisionId, r.Feedback, r.CreatedAt, r.Review)).ToList(),
+            session.References, session.DraftReferenceId, session.ReferenceMode);
         string temp = Path.Combine(folder, $"session-{Guid.NewGuid():N}.tmp");
         try
         {
@@ -61,7 +83,9 @@ public sealed class SessionStore(string rootDirectory)
         var session = new StudioSession
         {
             Id = id, Name = snapshot.Name, Brief = snapshot.Brief, SavedAt = snapshot.SavedAt,
-            Concepts = snapshot.Concepts, Trace = snapshot.Trace, SelectedRevisionId = snapshot.SelectedRevisionId
+            Concepts = snapshot.Concepts, Trace = snapshot.Trace, SelectedRevisionId = snapshot.SelectedRevisionId,
+            References = snapshot.References ?? [], DraftReferenceId = snapshot.DraftReferenceId,
+            ReferenceMode = snapshot.ReferenceMode ?? "preserve"
         };
         foreach (var revision in snapshot.Revisions)
         {
@@ -99,6 +123,7 @@ public sealed class SessionStore(string rootDirectory)
 
 public sealed record SavedSessionSummary(Guid Id, string Name, DateTimeOffset SavedAt, int ConceptCount);
 public sealed record SessionSnapshot(int Version, Guid Id, string Name, string Brief, DateTimeOffset SavedAt,
-    List<Concept> Concepts, List<string> Trace, Guid? SelectedRevisionId, List<RevisionSnapshot> Revisions);
+    List<Concept> Concepts, List<string> Trace, Guid? SelectedRevisionId, List<RevisionSnapshot> Revisions, List<SessionReference>? References = null,
+    Guid? DraftReferenceId = null, string? ReferenceMode = null);
 public sealed record RevisionSnapshot(Guid Id, int ConceptIndex, Guid? SourceRevisionId, string? Feedback,
     DateTimeOffset CreatedAt, ImageReview? Review);

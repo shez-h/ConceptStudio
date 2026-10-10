@@ -139,3 +139,16 @@ footer { display: flex; justify-content: space-between; gap: 24px; padding: 25px
 
 .delete-concept { color: #a01c28; align-self: flex-start; margin-top: 10px; }
 .delete-concept:hover:not(:disabled) { text-decoration: underline; }
+
+.reference-input { margin: 15px 0 22px; padding-top: 16px; border-top: 1px solid #d4c891; }
+.reference-input .fine { margin: 8px 0 14px; }
+.reference-input select { margin-bottom: 12px; }
+.reference-dropzone { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 20px 12px; border: 2px dashed var(--blue); border-radius: 12px; background: #fffdf3; color: var(--ink); text-align: center; transition: background .15s, border-color .15s; }
+.reference-dropzone strong { font-size: 14px; }
+.reference-dropzone > span:last-child { font-size: 12px; color: var(--muted); }
+.reference-dropzone .drop-icon { display: grid; place-items: center; width: 36px; height: 36px; border: 2px solid var(--ink); border-radius: 7px; background: var(--yellow); box-shadow: 2px 3px 0 var(--ink); font-size: 25px; font-weight: 800; margin-bottom: 5px; }
+.reference-dropzone:hover:not(:disabled), .reference-dropzone.drag-over { background: #e5efff; border-style: solid; }
+.reference-dropzone.drag-over { box-shadow: 0 0 0 4px #075bbb20; }
+.reference-dropzone:disabled { cursor: wait; }
+#reference-preview, .reference-link img { display: block; max-width: 100%; max-height: 180px; object-fit: contain; border: 1px solid var(--line); border-radius: 8px; background: white; margin: 8px 0 14px; }
+.reference-link { display: block; font-size: 12px; color: var(--blue); }

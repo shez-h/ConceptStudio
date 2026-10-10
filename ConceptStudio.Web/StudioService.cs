@@ -42,7 +42,7 @@ public sealed class StudioService(IWebHostEnvironment environment, IConfiguratio
     private string OutputDirectory => Environment.GetEnvironmentVariable("CONCEPT_STUDIO_OUTPUT_DIR")
         ?? Path.Combine(environment.ContentRootPath, "artifacts", "images");
 
-    public async Task<StudioSession> GenerateConceptsAsync(StudioSession session, string brief, int count, CancellationToken ct)
+    public async Task<StudioSession> GenerateConceptsAsync(StudioSession session, string brief, int count, CancellationToken ct, Guid? referenceId = null, string referenceMode = "preserve")
     {
         var client = TextClient();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -50,12 +50,13 @@ public sealed class StudioService(IWebHostEnvironment environment, IConfiguratio
         await using var mcp = await GuidelinesMcpClient.ConnectAsync(timeout.Token);
         var tools = await McpToolAdapter.DiscoverAsync(mcp, timeout.Token);
         List<string> trace = [];
-        var request = ConceptGenerationRequest.Build(TextModel, brief, count, tools.ToArray());
+        var request = ConceptGenerationRequest.Build(TextModel, brief, count, GetSketch(session, referenceId, referenceMode), tools.ToArray());
         var result = await new AgentRunner(client).RunAsync(request, trace.Add, timeout.Token);
         var concepts = ConceptGenerationRequest.ReadConcepts(result.Text, count, brief);
         session.Brief = brief;
         // Keep earlier concepts and revision indices stable when exploring another direction.
-        session.Concepts.AddRange(concepts);
+        session.Concepts.AddRange(concepts.Select(c => c with { ReferenceImageId = referenceId, ReferenceMode = referenceId is null ? null : referenceMode }));
+        session.DraftReferenceId = referenceId; session.ReferenceMode = referenceMode;
         session.Trace.AddRange(trace);
         session.HasUnsavedChanges = true;
         return session;
@@ -72,12 +73,19 @@ public sealed class StudioService(IWebHostEnvironment environment, IConfiguratio
             var source = session.Revisions[sourceId];
             path = await new ConceptImageEditor(Images()).EditAsync(concept, source.Path, input.Feedback!, OutputDirectory, timeout.Token);
         }
-        else path = await new ConceptImageGenerator(Images()).GenerateAsync(concept, OutputDirectory, timeout.Token);
+        else path = await new ConceptImageGenerator(Images()).GenerateAsync(concept, OutputDirectory, timeout.Token, GetSketch(session, concept.ReferenceImageId, concept.ReferenceMode ?? "preserve"));
         var revision = new StudioRevision(Guid.NewGuid(), input.ConceptIndex, path, input.SourceRevisionId,
             input.Feedback, DateTimeOffset.UtcNow);
         session.Revisions[revision.Id] = revision;
         session.HasUnsavedChanges = true;
         return revision;
+    }
+
+    private SketchInput? GetSketch(StudioSession session, Guid? id, string mode)
+    {
+        if (id is null) return null;
+        var reference = session.References.Single(r => r.Id == id);
+        return new SketchInput(store.ReferencePath(session.Id, reference), reference.MediaType, mode);
     }
 
     public async Task<ImageReview> ReviewAsync(StudioSession session, StudioRevision revision, CancellationToken ct)

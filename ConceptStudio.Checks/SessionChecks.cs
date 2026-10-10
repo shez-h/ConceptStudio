@@ -9,6 +9,11 @@ public static class SessionChecks
         try
         {
             var store = new SessionStore(Path.Combine(directory, "sessions"));
+            foreach (var invalid in new[] { Array.Empty<byte>(), "<svg></svg>"u8.ToArray(), new byte[SessionReference.MaxBytes + 1] })
+            {
+                try { SessionReference.DetectMediaType(invalid); throw new Exception("Invalid upload accepted"); }
+                catch (ArgumentException) { }
+            }
             var draft = new StudioSession { Name = "First idea", Brief = "Just a brief" };
             await store.SaveAsync(draft);
             var restored = await new SessionStore(Path.Combine(directory, "sessions")).LoadAsync(draft.Id);
@@ -19,6 +24,9 @@ public static class SessionChecks
             string source = Path.Combine(directory, "original.png");
             byte[] png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=");
             await File.WriteAllBytesAsync(source, png);
+            var reference = await store.AddReferenceAsync(draft, "../../sketch.png", png);
+            draft.ReferenceMode = "inspiration";
+            draft.Concepts[0] = draft.Concepts[0] with { ReferenceImageId = reference.Id, ReferenceMode = "preserve" };
             var original = new StudioRevision(Guid.NewGuid(), 0, source, null, null, DateTimeOffset.UtcNow);
             var edit = new StudioRevision(Guid.NewGuid(), 0, source, original.Id, "Remove extra window", DateTimeOffset.UtcNow)
                 { Review = new ImageReview([new GuidelineFinding(1, "uncertain", "Far side is hidden.")]) };
@@ -43,6 +51,11 @@ public static class SessionChecks
             if (restored.Concepts.Count != 2 || restored.Concepts[1].Brief != "A new forest idea" ||
                 restored.Concepts[0].Brief is not null || restored.Revisions[original.Id].ConceptIndex != 0)
                 throw new Exception("Appending concepts must preserve individual briefs and existing revision associations.");
+            if (restored.References.Count != 1 || restored.DraftReferenceId != reference.Id ||
+                restored.ReferenceMode != "inspiration" || restored.Concepts[0].ReferenceImageId != reference.Id ||
+                restored.Concepts[0].ReferenceMode != "preserve" || restored.References[0].Name != "sketch.png" ||
+                !File.ReadAllBytes(store.ReferencePath(restored.Id, restored.References[0])).SequenceEqual(png))
+                throw new Exception("References must survive save/reopen with their original concept-specific modes and pixels.");
             restored.Name = "Renamed idea";
             await store.SaveAsync(restored);
             if ((await store.ListAsync()).Single().Name != "Renamed idea") throw new Exception("Save must update existing session.");

@@ -48,6 +48,19 @@ public static class ReviewChecks
                 try { ConceptImageReviewer.ReadReview(invalid, 1); throw new Exception("Invalid review accepted."); }
                 catch (AgentResponseException) { }
             }
+            foreach (string mediaType in new[] { "image/png", "image/jpeg" })
+            {
+                var sketch = new SketchInput(path, mediaType, "preserve");
+                var conceptRequest = ConceptGenerationRequest.Build("test-model", "A rescue vehicle", 1, sketch);
+                await new AgentRunner(client).RunAsync(conceptRequest);
+                using var sent = JsonDocument.Parse(handler.Body!);
+                var parts = sent.RootElement.GetProperty("input")[0].GetProperty("content");
+                if (parts[1].GetProperty("image_url").GetString() != $"data:{mediaType};base64,{png}" ||
+                    !parts[0].GetProperty("text").GetString()!.Contains(sketch.Guidance) ||
+                    !parts[0].GetProperty("text").GetString()!.Contains("A rescue vehicle"))
+                    throw new Exception("Concept generation must send the image bytes, MIME type, brief and reference mode.");
+            }
+            Console.WriteLine("PASS: Multimodal concept request sends brief, reference guidance and image data URL (simulated API)");
             handler.Status = HttpStatusCode.TooManyRequests;
             int before = handler.Calls;
             try { await reviewer.ReviewAsync(path, ["Exactly two windows."]); throw new Exception("Expected API error."); }

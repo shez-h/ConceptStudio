@@ -7,7 +7,7 @@ public sealed class AgentRequestBuilder
 {
     private string? model;
     private string? instructions;
-    private readonly List<string> inputs = [];
+    private readonly List<Func<ResponseItem>> inputs = [];
     private readonly Dictionary<string, AgentTool> tools = new(StringComparer.Ordinal);
     private string? outputName;
     private string? outputSchema;
@@ -31,7 +31,18 @@ public sealed class AgentRequestBuilder
     public AgentRequestBuilder WithInput(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
-        inputs.Add(value);
+        inputs.Add(() => ResponseItem.CreateUserMessageItem(value));
+        return this;
+    }
+
+    public AgentRequestBuilder WithInput(string text, BinaryData image)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        ArgumentNullException.ThrowIfNull(image);
+        inputs.Add(() => ResponseItem.CreateUserMessageItem([
+            ResponseContentPart.CreateInputTextPart(text),
+            ResponseContentPart.CreateInputImagePart(image)
+        ]));
         return this;
     }
 
@@ -76,8 +87,8 @@ public sealed class AgentRequestBuilder
             MaxOutputTokenCount = maxOutputTokens,
             StoredOutputEnabled = false
         };
-        foreach (string input in inputs)
-            options.InputItems.Add(ResponseItem.CreateUserMessageItem(input));
+        foreach (var input in inputs)
+            options.InputItems.Add(input());
 
         if (outputSchema is not null)
             options.TextOptions = new ResponseTextOptions

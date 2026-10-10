@@ -21,6 +21,8 @@ async function refreshSavedSessions() {
 }
 function displaySession(next) {
   session = next; selectedRevision = null; reviewErrors.clear(); dirty = false;
+  renderReferences(session.draftReferenceId); $('reference-mode').value = session.referenceMode || 'preserve';
+  $('reference-file').value = '';
   $('session-name').value = session.name; $('brief').value = session.brief;
   $('feedback').value = ''; $('preview-panel').hidden = true;
   localStorage.setItem('concept-studio-session', session.id); renderConcepts();
@@ -37,7 +39,7 @@ async function api(path, body) {
   return data;
 }
 function lock(value, status) {
-  busy = value; document.querySelectorAll('button, textarea, input, select').forEach(el => el.disabled = value);
+  busy = value; $('reference-dropzone').classList.remove('drag-over'); document.querySelectorAll('button, textarea, input, select').forEach(el => el.disabled = value);
   $('explore').disabled = value || !configured;
   $('activity-text').textContent = status;
   $('concept-stage').classList.toggle('working', value);
@@ -85,6 +87,13 @@ function renderConcepts() {
     const briefDetails = node('details', null, 'concept-brief');
     briefDetails.append(node('summary', 'Original brief'));
     briefDetails.append(node('p', concept.brief ?? 'The original brief was not recorded for this older concept.', 'fine'));
+    const reference = session.references?.find(r => r.id === concept.referenceImageId);
+    if (reference) {
+      const link = node('a', null, 'reference-link'); link.href = reference.imageUrl; link.target = '_blank'; link.rel = 'noopener';
+      const thumbnail = node('img'); thumbnail.src = reference.imageUrl; thumbnail.alt = `Reference: ${reference.name}`;
+      link.append(thumbnail, node('span', concept.referenceMode === 'inspiration' ? 'Loose inspiration' : 'Preserve main shape'));
+      briefDetails.append(link);
+    }
     card.append(briefDetails);
     const details = node('details'); details.append(node('summary', 'Prompt & applied guidelines'));
     details.append(node('p', concept.imagePrompt, 'fine'));
@@ -148,7 +157,7 @@ $('brief-form').onsubmit = async event => {
   event.preventDefault(); if (busy) return; error(''); lock(true, 'Exploring your brief with the studio tools…');
   try {
     await ensureSession();
-    session = await api(`/api/sessions/${session.id}/concepts`, { brief: $('brief').value, count: Number($('generation-count').value) });
+    session = await api(`/api/sessions/${session.id}/concepts`, { brief: $('brief').value, count: Number($('generation-count').value), referenceImageId: $('reference-select').value || null, referenceMode: $('reference-mode').value });
     renderConcepts(); markDirty();
   } catch (ex) { error(ex.message); }
   finally { lock(false, 'Choose a concept to visualize.'); }
@@ -173,6 +182,73 @@ async function start() {
   } catch (ex) { error(ex.message); }
   finally { lock(false, configured ? 'Ready when you are.' : 'Waiting for server API configuration.'); }
 }
+function renderReferences(selectedId) {
+  $('reference-select').replaceChildren(node('option', 'No reference image'));
+  $('reference-select').firstChild.value = '';
+  for (const reference of session?.references || []) {
+    const option = node('option', reference.name); option.value = reference.id; $('reference-select').append(option);
+  }
+  $('reference-select').value = selectedId || ''; showReference();
+}
+function showReference() {
+  const reference = session?.references?.find(r => r.id === $('reference-select').value);
+  $('reference-preview').hidden = !reference;
+  if (reference) $('reference-preview').src = reference.imageUrl;
+  else $('reference-preview').removeAttribute('src');
+}
+$('reference-select').onchange = () => { showReference(); markDirty(); };
+$('reference-mode').onchange = markDirty;
+async function uploadReference(file) {
+  if (!file || busy) return;
+  if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 5 * 1024 * 1024 || !file.size) {
+    error('Choose a PNG or JPEG image up to 5 MB.'); $('reference-file').value = ''; return;
+  }
+  error(''); lock(true, 'Adding your reference image…');
+  try {
+    await ensureSession();
+    const response = await fetch(`/api/sessions/${session.id}/references?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST', headers: { 'Content-Type': file.type }, body: file
+    });
+    const reference = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(reference.error || 'Upload failed.');
+    session.references ||= []; session.references.push(reference);
+    renderReferences(reference.id); markDirty();
+  } catch (ex) { error(ex.message); }
+  finally { $('reference-file').value = ''; lock(false, 'Ready when you are.'); }
+}
+$('reference-file').onchange = () => uploadReference($('reference-file').files[0]);
+$('reference-dropzone').onclick = () => { if (!busy) $('reference-file').click(); };
+let referenceDragDepth = 0;
+function isFileDrag(event) { return Array.from(event.dataTransfer?.types || []).includes('Files'); }
+function resetReferenceDrag() {
+  referenceDragDepth = 0; $('reference-dropzone').classList.remove('drag-over');
+}
+$('reference-dropzone').ondragenter = event => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  if (!busy) { referenceDragDepth++; $('reference-dropzone').classList.add('drag-over'); }
+};
+$('reference-dropzone').ondragover = event => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault(); event.dataTransfer.dropEffect = busy ? 'none' : 'copy';
+};
+$('reference-dropzone').ondragleave = event => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault(); referenceDragDepth = Math.max(0, referenceDragDepth - 1);
+  if (!referenceDragDepth) resetReferenceDrag();
+};
+$('reference-dropzone').ondrop = event => {
+  event.preventDefault(); resetReferenceDrag();
+  if (busy) return;
+  const files = Array.from(event.dataTransfer?.files || []);
+  if (files.length !== 1) { error('Drop one PNG or JPEG image at a time.'); return; }
+  uploadReference(files[0]);
+};
+// Prevent dropped files outside the zone from navigating away from unsaved work.
+window.addEventListener('dragover', event => { if (isFileDrag(event)) event.preventDefault(); });
+window.addEventListener('drop', event => { if (isFileDrag(event)) { event.preventDefault(); resetReferenceDrag(); } });
+window.addEventListener('dragend', resetReferenceDrag);
+
 $('generation-count').addEventListener('change', () => {
   $('explore').textContent = Number($('generation-count').value) === 1 ? 'Add concept →' : 'Add concepts →';
 });
@@ -185,7 +261,7 @@ $('save-session').onclick = async () => {
   try {
     await ensureSession();
     const saved = await api(`/api/sessions/${session.id}/save`, {
-      name: $('session-name').value, brief: $('brief').value, selectedRevisionId: selectedRevision?.id || null
+      name: $('session-name').value, brief: $('brief').value, selectedRevisionId: selectedRevision?.id || null, draftReferenceId: $('reference-select').value || null, referenceMode: $('reference-mode').value
     });
     session.savedAt = saved.savedAt; session.name = saved.name; session.brief = saved.brief;
     dirty = false; saveStatus(); await refreshSavedSessions();

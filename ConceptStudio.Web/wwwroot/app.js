@@ -193,9 +193,17 @@ function renderReferences(selectedId) {
 function showReference() {
   const reference = session?.references?.find(r => r.id === $('reference-select').value);
   $('reference-preview').hidden = !reference;
+  $('remove-reference').hidden = !reference;
   if (reference) $('reference-preview').src = reference.imageUrl;
   else $('reference-preview').removeAttribute('src');
 }
+$('remove-reference').onclick = () => {
+  if (busy) return;
+  $('reference-select').value = '';
+  $('reference-file').value = '';
+  if (session) session.draftReferenceId = null;
+  showReference(); markDirty();
+};
 $('reference-select').onchange = () => { showReference(); markDirty(); };
 $('reference-mode').onchange = markDirty;
 async function uploadReference(file) {

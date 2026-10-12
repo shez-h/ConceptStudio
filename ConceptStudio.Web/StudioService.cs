@@ -20,10 +20,9 @@ public sealed class StudioService(IWebHostEnvironment environment, IConfiguratio
 
     public async Task<StudioSession?> FindSessionAsync(Guid id, CancellationToken ct)
     {
-        if (Sessions.TryGetValue(id, out var existing)) return existing.IsDeleted ? null : existing;
+        if (Sessions.TryGetValue(id, out var existing)) return existing;
         var saved = await store.LoadAsync(id, ct);
-        var session = saved is null ? null : Sessions.GetOrAdd(id, saved);
-        return session?.IsDeleted == true ? null : session;
+        return saved is null ? null : Sessions.GetOrAdd(id, saved);
     }
 
     public string TextModel => Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4.1-mini";
@@ -66,19 +65,45 @@ public sealed class StudioService(IWebHostEnvironment environment, IConfiguratio
     public async Task<StudioRevision> GenerateImageAsync(StudioSession session, ImageRequest input, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
         timeout.CancelAfter(TimeSpan.FromMinutes(3));
         var concept = session.Concepts[input.ConceptIndex];
+
         string path;
+        
         if (input.SourceRevisionId is { } sourceId)
         {
             var source = session.Revisions[sourceId];
-            path = await new ConceptImageEditor(Images()).EditAsync(concept, source.Path, input.Feedback!, OutputDirectory, timeout.Token);
+            path = await new ConceptImageEditor(Images()).EditAsync(
+                concept, 
+                source.Path,
+                input.Feedback!,
+                OutputDirectory,
+                timeout.Token);
         }
-        else path = await new ConceptImageGenerator(Images()).GenerateAsync(concept, OutputDirectory, timeout.Token, GetSketch(session, concept.ReferenceImageId, concept.ReferenceMode ?? "preserve"));
-        var revision = new StudioRevision(Guid.NewGuid(), input.ConceptIndex, path, input.SourceRevisionId,
-            input.Feedback, DateTimeOffset.UtcNow);
+        else 
+        {
+            path = await new ConceptImageGenerator(Images()).GenerateAsync(
+                concept,
+                OutputDirectory,
+                timeout.Token,
+                GetSketch(
+                    session,
+                    concept.ReferenceImageId,
+                    concept.ReferenceMode ?? "preserve"));
+        }
+
+        var revision = new StudioRevision(
+            Guid.NewGuid(),
+            input.ConceptIndex,
+            path,
+            input.SourceRevisionId,
+            input.Feedback,
+            DateTimeOffset.UtcNow);
+
         session.Revisions[revision.Id] = revision;
         session.HasUnsavedChanges = true;
+
         return revision;
     }
 

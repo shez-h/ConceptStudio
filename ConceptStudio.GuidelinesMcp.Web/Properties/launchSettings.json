@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "ConceptStudio.GuidelinesMcp.Web": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://127.0.0.1:5090",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

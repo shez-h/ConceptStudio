@@ -20,9 +20,10 @@ public sealed class StudioService(IWebHostEnvironment environment, IConfiguratio
 
     public async Task<StudioSession?> FindSessionAsync(Guid id, CancellationToken ct)
     {
-        if (Sessions.TryGetValue(id, out var existing)) return existing;
+        if (Sessions.TryGetValue(id, out var existing)) return existing.IsDeleted ? null : existing;
         var saved = await store.LoadAsync(id, ct);
-        return saved is null ? null : Sessions.GetOrAdd(id, saved);
+        var session = saved is null ? null : Sessions.GetOrAdd(id, saved);
+        return session?.IsDeleted == true ? null : session;
     }
 
     public string TextModel => Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4.1-mini";

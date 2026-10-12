@@ -283,6 +283,27 @@ $('new-session').onclick = async () => {
   catch (ex) { error(ex.message); }
   finally { lock(false, 'Describe your next idea.'); }
 };
+$('delete-session').onclick = async () => {
+  const id = $('saved-sessions').value;
+  if (busy || !id) return;
+  const name = $('saved-sessions').selectedOptions[0].textContent;
+  if (!confirm(`Delete “${name}”? This permanently removes the saved session, its stored images and references.${session?.id === id ? ' Unsaved changes in this session will also be discarded.' : ''} This cannot be undone.`)) return;
+  error(''); lock(true, 'Deleting session…');
+  try {
+    await api(`/api/sessions/${id}/delete`, {});
+    if (session?.id === id) {
+      session = null; selectedRevision = null; dirty = false; reviewErrors.clear();
+      localStorage.removeItem('concept-studio-session');
+      $('session-name').value = 'Untitled design'; $('brief').value = ''; $('feedback').value = '';
+      $('reference-file').value = ''; renderReferences(null); $('reference-mode').value = 'preserve';
+      $('preview-panel').hidden = true; $('preview').removeAttribute('src'); $('open-image').removeAttribute('href');
+      $('concepts').innerHTML = emptyConcepts; $('concept-count').textContent = '0 concepts';
+      $('trace-wrap').hidden = true; $('trace').textContent = ''; saveStatus();
+    }
+    await refreshSavedSessions();
+  } catch (ex) { error(`Could not delete session: ${ex.message}`); }
+  finally { lock(false, 'Ready when you are.'); }
+};
 $('open-session').onclick = async () => {
   const id = $('saved-sessions').value;
   if (busy || !id || (dirty && !confirm('Open the saved session? Changes since your last save will not be saved.'))) return;

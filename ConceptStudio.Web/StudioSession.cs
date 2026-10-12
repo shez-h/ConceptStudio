@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 
 public sealed class StudioSession
 {
+    public bool IsDeleted { get; set; }
     public Guid Id { get; init; } = Guid.NewGuid();
     public string Name { get; set; } = "Untitled design";
     public string Brief { get; set; } = "";

@@ -3,6 +3,12 @@ using OpenAI.Responses;
 
 #pragma warning disable OPENAI001
 
+if (args.FirstOrDefault() == "--mcp-http")
+{
+    await HttpMcpDemo.RunAsync(new Uri(args.ElementAtOrDefault(1) ?? "http://127.0.0.1:5090/mcp"));
+    return;
+}
+
 await ImageChecks.RunAsync();
 await ReviewChecks.RunAsync();
 await SessionChecks.RunAsync();

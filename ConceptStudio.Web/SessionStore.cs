@@ -7,6 +7,14 @@ public sealed class SessionStore(string rootDirectory)
     private string Folder(Guid id) => Path.Combine(Path.GetFullPath(rootDirectory), id.ToString());
     private string ImagePath(Guid id, Guid revisionId) => Path.Combine(Folder(id), "images", revisionId.ToString(), "preview.png");
 
+    // Called while holding the session gate. Only this session's owned files are removed.
+    public void Delete(StudioSession session)
+    {
+        string folder = Folder(session.Id);
+        if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        session.IsDeleted = true;
+    }
+
     public string ReferencePath(Guid sessionId, SessionReference reference)
     {
         string extension = reference.MediaType switch { "image/png" => ".png", "image/jpeg" => ".jpg",
@@ -31,6 +39,7 @@ public sealed class SessionStore(string rootDirectory)
     // Caller holds the session gate, so concepts/revisions cannot change during the snapshot.
     public async Task SaveAsync(StudioSession session, CancellationToken ct = default)
     {
+        if (session.IsDeleted) throw new InvalidOperationException("This session was deleted.");
         string folder = Folder(session.Id);
         Directory.CreateDirectory(folder);
         foreach (var revision in session.Revisions.Values)

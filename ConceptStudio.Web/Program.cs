@@ -70,6 +70,7 @@ app.MapPost("/api/sessions/{id:guid}/open", async (Guid id, StudioService studio
         if (!await current.Gate.WaitAsync(0, ct)) return Results.Conflict(new { error = "This session is busy." });
         try
         {
+            if (current.IsDeleted) return Results.NotFound(new { error = "This session was deleted." });
             current.Name = saved.Name; current.Brief = saved.Brief; current.SavedAt = saved.SavedAt;
             current.SelectedRevisionId = saved.SelectedRevisionId; current.HasUnsavedChanges = false;
             current.References.Clear(); current.References.AddRange(saved.References);
@@ -85,6 +86,19 @@ app.MapPost("/api/sessions/{id:guid}/open", async (Guid id, StudioService studio
     studio.Sessions[id] = saved;
     return Results.Ok(saved.View());
 });
+app.MapPost("/api/sessions/{id:guid}/delete", async (Guid id, StudioService studio, SessionStore store, CancellationToken ct) =>
+{
+    var session = await studio.FindSessionAsync(id, ct);
+    if (session is null) return Results.NotFound(new { error = "Session not found." });
+    if (!await session.Gate.WaitAsync(0, ct)) return Results.Conflict(new { error = "This session is busy. Wait for it to finish before deleting." });
+    try
+    {
+        store.Delete(session);
+        // Keep a tombstone so requests already holding this object cannot restore it.
+        return Results.Ok(new { deleted = true });
+    }
+    finally { session.Gate.Release(); }
+});
 app.MapPost("/api/sessions/{id:guid}/save", async (Guid id, SaveSessionRequest input, StudioService studio, SessionStore store, CancellationToken ct) =>
 {
     if (string.IsNullOrWhiteSpace(input.Name) || input.Name.Length > 100 || input.Brief is null || input.Brief.Length > 4000)
@@ -94,6 +108,7 @@ app.MapPost("/api/sessions/{id:guid}/save", async (Guid id, SaveSessionRequest i
     await session.Gate.WaitAsync(ct);
     try
     {
+        if (session.IsDeleted) return Results.NotFound(new { error = "This session was deleted." });
         if (input.SelectedRevisionId is { } selected && !session.Revisions.ContainsKey(selected))
             return Results.BadRequest(new { error = "Unknown selected revision." });
         if (input.ReferenceMode is not ("preserve" or "inspiration") ||

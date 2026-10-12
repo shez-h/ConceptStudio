@@ -65,6 +65,17 @@ public static class SessionChecks
             catch (FileNotFoundException) { }
             if ((await store.LoadAsync(draft.Id))!.Name != "Renamed idea") throw new Exception("Failed save replaced the last valid snapshot.");
             if (await store.LoadAsync(Guid.NewGuid()) is not null) throw new Exception("Unknown session must return null.");
+            var other = new StudioSession { Name = "Keep me" };
+            await store.SaveAsync(other);
+            string referencePath = store.ReferencePath(restored.Id, restored.References[0]);
+            store.Delete(restored);
+            if (!restored.IsDeleted || await store.LoadAsync(restored.Id) is not null || File.Exists(referencePath) ||
+                (await store.ListAsync()).Single().Id != other.Id)
+                throw new Exception("Deleting a session must remove its owned files and preserve other sessions.");
+            try { await store.SaveAsync(restored); throw new Exception("Deleted session was resurrected."); }
+            catch (InvalidOperationException) { }
+            store.Delete(new StudioSession()); // An unsaved session has no directory.
+            Console.WriteLine("PASS: Session deletion removes saved files, preserves other sessions and prevents stale saves");
             Console.WriteLine("PASS: Draft save, fresh-store reload, guidelines, image copies, revision history/reviews, rename, listing and failed-save preservation");
         }
         finally { Directory.Delete(directory, true); }

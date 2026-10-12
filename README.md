@@ -310,3 +310,63 @@ are not supported by this first version.
 
 Local checks cover multimodal request payloads, reference-based image edits, saving/reopening,
 per-concept provenance, invalid formats and upload size limits; model responses are simulated.
+
+## MCP over HTTP: a separately running web service
+
+The solution includes `ConceptStudio.GuidelinesMcp.Web`, an ASP.NET Core host for the **same**
+guidelines and palette tools. Its `Program.cs` registers HTTP transport and maps `/mcp`.
+This uses the SDK's [Streamable HTTP transport](https://github.com/modelcontextprotocol/csharp-sdk/blob/main/docs/concepts/transports/transports.md).
+The existing stdio server remains the default.
+
+From the solution directory, start the service in one terminal:
+
+```sh
+dotnet run --project ConceptStudio.GuidelinesMcp.Web
+```
+
+In another terminal, discover and call its tools directly (no API key or model required):
+
+```sh
+dotnet run --project ConceptStudio.Checks -- --mcp-http
+```
+
+Read `ConceptStudio.Checks/HttpMcpDemo.cs`: `ListToolsAsync` discovers tool definitions and
+`CallToolAsync` invokes `get_design_guidelines` with `theme = underwater`, then the sunset palette.
+The server is an independent process; the HTTP client does not launch or stop it.
+
+To use HTTP MCP within the actual web app, keep the MCP service running and start the app with:
+
+```sh
+CONCEPT_STUDIO_MCP_URL=http://127.0.0.1:5090/mcp dotnet run --project ConceptStudio.Web
+```
+
+The same environment setting works with `ConceptStudio.Console`. For a VS Code debug run, put
+`CONCEPT_STUDIO_MCP_URL` in that debug profile's environment. Omit/unset it to use stdio again.
+Save existing work before restarting the app. A configured but unavailable HTTP endpoint produces
+an error; it does not silently fall back to stdio.
+
+Follow the flow:
+
+```text
+StudioService / ConsoleApp
+  -> GuidelinesMcpClient.ConnectAsync (chooses HTTP when configured)
+  -> HttpClientTransport -> http://127.0.0.1:5090/mcp
+  -> McpToolAdapter.DiscoverAsync -> tools/list
+  -> agent loop receives a model tool request
+  -> adapter calls CallToolAsync -> tools/call over HTTP
+  -> DesignGuidelinesTools or ColourPaletteTools executes in the web service
+  -> result returns to the app, then to the model
+```
+
+`MapMcp` implements the MCP protocol endpoint; we do not write one REST controller per tool.
+HTTP transport is stateless here because these tools are simple lookups. This transport setting
+is separate from design-session persistence and model conversation state.
+
+The demo host binds to loopback and validates Host/Origin. It has no authentication and is intended
+for local learning. Deploying it for a team would also need HTTPS and authentication/authorization.
+
+To delete a whole saved session, select it in **Your saved designs** and click **Delete**.
+Confirmation permanently removes its saved session folder, including owned images and uploaded
+references. This happens immediately, without a separate Save. The active view is cleared if it
+was that session; other sessions are preserved. Original generation artifacts outside the session
+folder are retained. Busy sessions must finish before deletion.

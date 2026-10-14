@@ -5,6 +5,7 @@
 !.env.example
 .DS_Store
 **/artifacts/
+.vscode/
 
 # Local launch configuration may contain API credentials.
 /ConceptStudio.Console/Properties/launchSettings.json

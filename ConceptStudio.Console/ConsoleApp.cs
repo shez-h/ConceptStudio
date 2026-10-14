@@ -1,8 +1,8 @@
 using System.ClientModel;
 using System.Diagnostics;
 using System.Text.Json;
-using OpenAI.Responses;
 using ModelContextProtocol;
+using OpenAI.Responses;
 
 // The SDK currently marks the Responses surface as experimental.
 #pragma warning disable OPENAI001
@@ -40,10 +40,21 @@ public static class ConsoleApp
             foreach (AgentTool tool in tools)
                 Console.WriteLine($"Discovered MCP tool: {tool.Name}");
             AgentRequest request = ConceptGenerationRequest.Build(model, brief, tools.ToArray());
-            AgentRunResult result = await runner.RunAsync(request, Console.WriteLine, timeout.Token);
-            IReadOnlyList<Concept> concepts = ConceptGenerationRequest.ReadConcepts(result.Text, brief: brief);
-            Console.WriteLine($"\nCompleted {result.Rounds} round(s) in {timer.Elapsed.TotalSeconds:F1}s");
-            Console.WriteLine($"Total tokens: {result.InputTokens?.ToString() ?? "unknown"} input, {result.OutputTokens?.ToString() ?? "unknown"} output");
+            AgentRunResult result = await runner.RunAsync(
+                request,
+                Console.WriteLine,
+                timeout.Token
+            );
+            IReadOnlyList<Concept> concepts = ConceptGenerationRequest.ReadConcepts(
+                result.Text,
+                brief: brief
+            );
+            Console.WriteLine(
+                $"\nCompleted {result.Rounds} round(s) in {timer.Elapsed.TotalSeconds:F1}s"
+            );
+            Console.WriteLine(
+                $"Total tokens: {result.InputTokens?.ToString() ?? "unknown"} input, {result.OutputTokens?.ToString() ?? "unknown"} output"
+            );
 
             for (int index = 0; index < concepts.Count; index++)
             {
@@ -52,7 +63,8 @@ public static class ConsoleApp
                 Console.WriteLine(concept.Description);
                 Console.WriteLine($"Image prompt: {concept.ImagePrompt}");
                 Console.WriteLine("Applied guidelines (reported by the model):");
-                if (concept.AppliedGuidelines.Count == 0) Console.WriteLine("  None reported.");
+                if (concept.AppliedGuidelines.Count == 0)
+                    Console.WriteLine("  None reported.");
                 foreach (string guideline in concept.AppliedGuidelines)
                     Console.WriteLine($"  - {guideline}");
             }
@@ -63,18 +75,22 @@ public static class ConsoleApp
         {
             // Avoid printing the raw error body, which can contain request details.
             Console.Error.WriteLine($"API request failed (HTTP {ex.Status}).");
-            Console.Error.WriteLine(ex.Status switch
-            {
-                401 => "Check your API key.",
-                403 or 404 => "Check project permissions and access to the configured model.",
-                429 => "Check API billing, quota, and rate limits before trying again.",
-                _ => "Check the API configuration and service status before trying again."
-            });
+            Console.Error.WriteLine(
+                ex.Status switch
+                {
+                    401 => "Check your API key.",
+                    403 or 404 => "Check project permissions and access to the configured model.",
+                    429 => "Check API billing, quota, and rate limits before trying again.",
+                    _ => "Check the API configuration and service status before trying again.",
+                }
+            );
             return 1;
         }
         catch (OperationCanceledException)
         {
-            Console.Error.WriteLine("Stopped waiting after 60 seconds. The provider may still have processed the request.");
+            Console.Error.WriteLine(
+                "Stopped waiting after 60 seconds. The provider may still have processed the request."
+            );
             return 1;
         }
         catch (HttpRequestException)
@@ -84,8 +100,7 @@ public static class ConsoleApp
         }
         catch (JsonException)
         {
-            Console.Error.WriteLine(
-                "The response could not be read as the expected concept data.");
+            Console.Error.WriteLine("The response could not be read as the expected concept data.");
             return 2;
         }
         catch (McpException ex)

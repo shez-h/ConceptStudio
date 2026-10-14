@@ -8,11 +8,14 @@ public sealed record AgentTool(
     string Description,
     string ParametersSchema,
     Func<string, CancellationToken, Task<string>> Handler,
-    bool StrictModeEnabled = true)
+    bool StrictModeEnabled = true
+)
 {
-    public ResponseTool CreateDefinition() => ResponseTool.CreateFunctionTool(
-        functionName: Name,
-        functionParameters: BinaryData.FromString(ParametersSchema),
-        strictModeEnabled: StrictModeEnabled,
-        functionDescription: Description);
+    public ResponseTool CreateDefinition() =>
+        ResponseTool.CreateFunctionTool(
+            functionName: Name,
+            functionParameters: BinaryData.FromString(ParametersSchema),
+            strictModeEnabled: StrictModeEnabled,
+            functionDescription: Description
+        );
 }

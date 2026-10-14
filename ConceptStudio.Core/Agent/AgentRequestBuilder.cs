@@ -39,10 +39,12 @@ public sealed class AgentRequestBuilder
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         ArgumentNullException.ThrowIfNull(image);
-        inputs.Add(() => ResponseItem.CreateUserMessageItem([
-            ResponseContentPart.CreateInputTextPart(text),
-            ResponseContentPart.CreateInputImagePart(image)
-        ]));
+        inputs.Add(() =>
+            ResponseItem.CreateUserMessageItem([
+                ResponseContentPart.CreateInputTextPart(text),
+                ResponseContentPart.CreateInputImagePart(image),
+            ])
+        );
         return this;
     }
 
@@ -85,7 +87,7 @@ public sealed class AgentRequestBuilder
             Model = model,
             Instructions = instructions,
             MaxOutputTokenCount = maxOutputTokens,
-            StoredOutputEnabled = false
+            StoredOutputEnabled = false,
         };
         foreach (var input in inputs)
             options.InputItems.Add(input());
@@ -96,7 +98,8 @@ public sealed class AgentRequestBuilder
                 TextFormat = ResponseTextFormat.CreateJsonSchemaFormat(
                     jsonSchemaFormatName: outputName!,
                     jsonSchema: BinaryData.FromString(outputSchema),
-                    jsonSchemaIsStrict: true)
+                    jsonSchemaIsStrict: true
+                ),
             };
 
         foreach (AgentTool tool in tools.Values)
@@ -118,7 +121,8 @@ public sealed class AgentRequestBuilder
 // One request represents one run; build another request to start an independent conversation.
 public sealed class AgentRequest(
     CreateResponseOptions options,
-    IReadOnlyDictionary<string, AgentTool> tools)
+    IReadOnlyDictionary<string, AgentTool> tools
+)
 {
     public CreateResponseOptions Options { get; } = options;
     public IReadOnlyDictionary<string, AgentTool> Tools { get; } = tools;

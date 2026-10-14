@@ -7,7 +7,9 @@ public sealed record Concept(
     [property: JsonPropertyName("appliedGuidelines")] List<string> AppliedGuidelines,
     [property: JsonPropertyName("brief")] string? Brief = null,
     [property: JsonPropertyName("referenceImageId")] Guid? ReferenceImageId = null,
-    [property: JsonPropertyName("referenceMode")] string? ReferenceMode = null);
+    [property: JsonPropertyName("referenceMode")] string? ReferenceMode = null
+);
 
 public sealed record ConceptResponse(
-    [property: JsonPropertyName("concepts")] List<Concept> Concepts);
+    [property: JsonPropertyName("concepts")] List<Concept> Concepts
+);

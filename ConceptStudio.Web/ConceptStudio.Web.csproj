@@ -7,12 +7,19 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../ConceptStudio.Core/ConceptStudio.Core.csproj" />
-    <ProjectReference Include="../ConceptStudio.GuidelinesMcp/ConceptStudio.GuidelinesMcp.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference
+      Include="../ConceptStudio.GuidelinesMcp/ConceptStudio.GuidelinesMcp.csproj"
+      ReferenceOutputAssembly="false"
+    />
   </ItemGroup>
   <Target Name="CopyGuidelinesMcpServer" AfterTargets="Build">
     <ItemGroup>
       <McpServerFiles Include="../ConceptStudio.GuidelinesMcp/bin/$(Configuration)/$(TargetFramework)/**/*" />
     </ItemGroup>
-    <Copy SourceFiles="@(McpServerFiles)" DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-server/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy
+      SourceFiles="@(McpServerFiles)"
+      DestinationFiles="@(McpServerFiles->'$(OutDir)mcp-server/%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true"
+    />
   </Target>
 </Project>

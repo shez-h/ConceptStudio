@@ -27,13 +27,19 @@ public sealed class ConceptImageReviewer(ResponsesClient client, string model)
           "required":["findings"],"additionalProperties":false}
         """;
 
-    public async Task<ImageReview> ReviewAsync(string imagePath, IReadOnlyList<string> guidelines,
-        CancellationToken cancellationToken = default)
+    public async Task<ImageReview> ReviewAsync(
+        string imagePath,
+        IReadOnlyList<string> guidelines,
+        CancellationToken cancellationToken = default
+    )
     {
         // With no guidelines there is nothing to assess, and no paid call is needed.
-        if (guidelines.Count == 0) return new ImageReview([]);
+        if (guidelines.Count == 0)
+            return new ImageReview([]);
         byte[] bytes = await File.ReadAllBytesAsync(imagePath, cancellationToken);
-        string input = JsonSerializer.Serialize(guidelines.Select((text, index) => new { id = index + 1, guideline = text }));
+        string input = JsonSerializer.Serialize(
+            guidelines.Select((text, index) => new { id = index + 1, guideline = text })
+        );
         CreateResponseOptions options = new()
         {
             Model = model,
@@ -43,41 +49,72 @@ public sealed class ConceptImageReviewer(ResponsesClient client, string model)
             TextOptions = new ResponseTextOptions
             {
                 TextFormat = ResponseTextFormat.CreateJsonSchemaFormat(
-                    "image_review", BinaryData.FromString(Schema), jsonSchemaIsStrict: true)
-            }
+                    "image_review",
+                    BinaryData.FromString(Schema),
+                    jsonSchemaIsStrict: true
+                ),
+            },
         };
-        options.InputItems.Add(ResponseItem.CreateUserMessageItem([
-            ResponseContentPart.CreateInputTextPart(input),
-            ResponseContentPart.CreateInputImagePart(BinaryData.FromBytes(bytes, "image/png"))
-        ]));
+        options.InputItems.Add(
+            ResponseItem.CreateUserMessageItem([
+                ResponseContentPart.CreateInputTextPart(input),
+                ResponseContentPart.CreateInputImagePart(BinaryData.FromBytes(bytes, "image/png")),
+            ])
+        );
 
         // A single Responses call with image + text input; no tools are registered.
         AgentRunResult result = await new AgentRunner(client).RunAsync(
-            new AgentRequest(options, new Dictionary<string, AgentTool>()), cancellationToken: cancellationToken);
+            new AgentRequest(options, new Dictionary<string, AgentTool>()),
+            cancellationToken: cancellationToken
+        );
         ImageReview review = ReadReview(result.Text, guidelines.Count);
-        await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(imagePath))!, "review.json"),
-            JsonSerializer.Serialize(new
-            {
-                model, imagePath = Path.GetFullPath(imagePath), guidelines, review,
-                result.InputTokens, result.OutputTokens
-            }, new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(imagePath))!, "review.json"),
+            JsonSerializer.Serialize(
+                new
+                {
+                    model,
+                    imagePath = Path.GetFullPath(imagePath),
+                    guidelines,
+                    review,
+                    result.InputTokens,
+                    result.OutputTokens,
+                },
+                new JsonSerializerOptions { WriteIndented = true }
+            ),
+            cancellationToken
+        );
         return review;
     }
 
     public static ImageReview ReadReview(string json, int guidelineCount)
     {
         var review = JsonSerializer.Deserialize<ImageReview>(json);
-        if (review?.Findings is null || review.Findings.Count != guidelineCount ||
-            review.Findings.Any(f => f is null || f.Id < 1 || f.Id > guidelineCount ||
-                f.Verdict is not ("pass" or "fail" or "uncertain") || string.IsNullOrWhiteSpace(f.Explanation)) ||
-            review.Findings.Select(f => f.Id).Distinct().Count() != guidelineCount)
-            throw new AgentResponseException("Review must contain one valid finding for every guideline.");
+        if (
+            review?.Findings is null
+            || review.Findings.Count != guidelineCount
+            || review.Findings.Any(f =>
+                f is null
+                || f.Id < 1
+                || f.Id > guidelineCount
+                || f.Verdict is not ("pass" or "fail" or "uncertain")
+                || string.IsNullOrWhiteSpace(f.Explanation)
+            )
+            || review.Findings.Select(f => f.Id).Distinct().Count() != guidelineCount
+        )
+            throw new AgentResponseException(
+                "Review must contain one valid finding for every guideline."
+            );
         return review;
     }
 }
 
-public sealed record ImageReview([property: JsonPropertyName("findings")] List<GuidelineFinding> Findings);
+public sealed record ImageReview(
+    [property: JsonPropertyName("findings")] List<GuidelineFinding> Findings
+);
+
 public sealed record GuidelineFinding(
     [property: JsonPropertyName("id")] int Id,
     [property: JsonPropertyName("verdict")] string Verdict,
-    [property: JsonPropertyName("explanation")] string Explanation);
+    [property: JsonPropertyName("explanation")] string Explanation
+);

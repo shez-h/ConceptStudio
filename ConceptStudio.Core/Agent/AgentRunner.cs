@@ -8,12 +8,14 @@ public sealed class AgentRunner(ResponsesClient client)
     public async Task<AgentRunResult> RunAsync(
         AgentRequest request,
         Action<string>? trace = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (request.HasRun)
             throw new InvalidOperationException("Build a fresh request for each run.");
         request.HasRun = true;
-        long inputTokens = 0, outputTokens = 0;
+        long inputTokens = 0,
+            outputTokens = 0;
         bool completeUsage = true;
         const int maxRounds = 4;
 
@@ -21,24 +23,36 @@ public sealed class AgentRunner(ResponsesClient client)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ResponseResult response = await client.CreateResponseAsync(
-                request.Options, cancellationToken);
+                request.Options,
+                cancellationToken
+            );
 
             trace?.Invoke($"Round {round}: {response.Status}");
             if (response.Usage is { } usage)
             {
                 inputTokens += usage.InputTokenCount;
                 outputTokens += usage.OutputTokenCount;
-                trace?.Invoke($"Tokens: {usage.InputTokenCount} input, {usage.OutputTokenCount} output");
+                trace?.Invoke(
+                    $"Tokens: {usage.InputTokenCount} input, {usage.OutputTokenCount} output"
+                );
             }
-            else completeUsage = false;
+            else
+                completeUsage = false;
 
             if (response.Status != ResponseStatus.Completed)
-                throw new AgentResponseException($"Generation did not complete ({response.Status}).");
+                throw new AgentResponseException(
+                    $"Generation did not complete ({response.Status})."
+                );
 
-            if (response.OutputItems.OfType<MessageResponseItem>()
-                .SelectMany(message => message.Content)
-                .Any(part => part.Kind == ResponseContentPartKind.Refusal))
-                throw new AgentResponseException("The model declined this request. Try revising the brief.");
+            if (
+                response
+                    .OutputItems.OfType<MessageResponseItem>()
+                    .SelectMany(message => message.Content)
+                    .Any(part => part.Kind == ResponseContentPartKind.Refusal)
+            )
+                throw new AgentResponseException(
+                    "The model declined this request. Try revising the brief."
+                );
 
             var calls = response.OutputItems.OfType<FunctionCallResponseItem>().ToList();
             if (calls.Count == 0)
@@ -46,8 +60,12 @@ public sealed class AgentRunner(ResponsesClient client)
                 string text = response.GetOutputText();
                 if (string.IsNullOrWhiteSpace(text))
                     throw new AgentResponseException("The response contained no output text.");
-                return new AgentRunResult(text, round,
-                    completeUsage ? inputTokens : null, completeUsage ? outputTokens : null);
+                return new AgentRunResult(
+                    text,
+                    round,
+                    completeUsage ? inputTokens : null,
+                    completeUsage ? outputTokens : null
+                );
             }
 
             // Do not execute more tools if we cannot make another model request.
@@ -67,8 +85,9 @@ public sealed class AgentRunner(ResponsesClient client)
                 trace?.Invoke($"Tool result: {output}");
 
                 // CallId links our result to the model's original request.
-                request.Options.InputItems.Add(ResponseItem.CreateFunctionCallOutputItem(
-                    call.CallId, output));
+                request.Options.InputItems.Add(
+                    ResponseItem.CreateFunctionCallOutputItem(call.CallId, output)
+                );
             }
         }
 
@@ -78,7 +97,8 @@ public sealed class AgentRunner(ResponsesClient client)
     public static async Task<string> ExecuteToolAsync(
         AgentRequest request,
         FunctionCallResponseItem call,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!request.Tools.TryGetValue(call.FunctionName, out AgentTool? tool))
@@ -97,4 +117,5 @@ public sealed class AgentRunner(ResponsesClient client)
 }
 
 public sealed record AgentRunResult(string Text, int Rounds, long? InputTokens, long? OutputTokens);
+
 public sealed class AgentResponseException(string message) : Exception(message);
